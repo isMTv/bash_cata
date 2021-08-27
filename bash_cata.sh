@@ -6,7 +6,7 @@ login="" # user for connect to mikrotik;
 privatekey="/root/.ssh/mik_rsa" # private key for ssh;
 fw_list="idps_alert" # name firewall list;
 fw_timeout="7" # days ban ip;
-wl_netmask="3" # whitelist net mask, only /32=4, /24=3, /16=2, /8=1;
+wl_netmask="3" # whitelist net mask, only 4=/32, 3=/24, 2=/16, 1=/8;
 
 # - #
 script_dir="$(dirname "$(readlink -f "$0")")"
