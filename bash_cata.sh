@@ -6,7 +6,7 @@ login="" # user for connect to mikrotik;
 privatekey="/root/.ssh/mik_rsa" # private key for ssh;
 fw_list="idps_alert" # name firewall list;
 fw_timeout="7" # days ban ip;
-wl_mask="3" # whitelist mask, only /32=4, /24=3, /16=2, /8=1;
+wl_netmask="3" # whitelist net mask, only /32=4, /24=3, /16=2, /8=1;
 
 # - #
 script_dir="$(dirname "$(readlink -f "$0")")"
@@ -22,7 +22,7 @@ if ! tmux has-session -t mbi &> /dev/null; then
 fi
 
 # Check files;
-if [ ! -e "${white_list}" ]; then touch "${white_list}" ; echo -e "# network address/mask\n\n# signature_id" > "${white_list}" ; fi
+if [ ! -e "${white_list}" ]; then touch "${white_list}" ; echo -e "# net_address/mask\n\n# signature_id" > "${white_list}" ; fi
 if [ ! -e "${mark_ip}" ]; then touch "${mark_ip}" ; fi
 
 # Setting the logger utility function;
@@ -40,7 +40,7 @@ alerts="$(echo "${LINE}" | jq -c '[.timestamp, .src_ip, .dest_ip, .dest_port, .p
 # White List;
 check_list () {
     wl="false"
-    src_ip_mask="$(cut -d. -f1-$wl_mask <<< "$src_ip")"
+    src_ip_mask="$(cut -d. -f1-$wl_netmask <<< "$src_ip")"
     if grep -q -E "${src_ip_mask}|${signature_id}" "${white_list}"; then wl="true" ; fi
 }
 
