@@ -6,7 +6,7 @@ login="" # user for connect to mikrotik;
 privatekey="/root/.ssh/mik_rsa" # private key for ssh;
 fw_list="idps_alert" # name firewall list;
 fw_timeout="7" # days ban ip;
-wl_mask="4" # whitelist mask, only /32=4, /24=3, /16=2, /8=1;
+wl_mask="3" # whitelist mask, only /32=4, /24=3, /16=2, /8=1;
 
 # - #
 script_dir="$(dirname "$(readlink -f "$0")")"
@@ -37,7 +37,7 @@ tail -q -f "${alerts_file}" --pid="$pid_suricata" -n 500 | while read -r LINE; d
 # Parsing Json file via jq;
 alerts="$(echo "${LINE}" | jq -c '[.timestamp, .src_ip, .dest_ip, .dest_port, .proto, .alert .signature_id, .alert .signature, .alert .category]' | sed 's/^.//g; s/"//g; s/]//g')"
 
-# Whitelist;
+# White List;
 check_list () {
     wl="false"
     src_ip_mask="$(cut -d. -f1-$wl_mask <<< "$src_ip")"
@@ -52,12 +52,13 @@ check_ip () {
     if ! grep -q "${src_ip}" "${mark_ip}"; then new_ip="true" ; echo "${src_ip}, ${timestamp::-12}" >> "${mark_ip}" ; fi
 }
 
+# Check Tmux Session;
 check_tmux () {
     if [ "$new_ip" = "true" ]; then
         ct="true"
         if ! else_error_ct="$(tmux has-session -t mbi 2>&1)"; then
             ct="false"
-            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Ошибка - ${else_error_ct}."
+            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${else_error_ct}."
             sed -i "/${src_ip}/d" "${mark_ip}"
             tmux new-session -d -s mbi "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${login}"@"${router}" -i "${privatekey}"" ; sleep 3s
         fi
