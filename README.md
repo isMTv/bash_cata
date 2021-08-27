@@ -24,6 +24,28 @@ A simple script that processes the generated Suricata eve-log in real time and, 
         - alert
 ```
 
+### Configuring ssh key authorization:
+```
+Create key mik_rsa:
+# cd ~/.ssh/
+# ssh-keygen -t rsa -b 2048
+- /root/.ssh/mik_rsa
+id_rsa [mik_rsa] - secret key (for the host from which we are connecting)
+id_rsa.pub [mik_rsa.pub] - public key (for the host to which we are connecting)
+```
+
+### We specify a lot of hosts through a space:
+```
+# nano ~/.ssh/config
+Host 172.16.5.89
+IdentityFile ~/.ssh/mik_rsa
+#ConnectTimeout 3
+#ServerAliveInterval 900
+
+# chmod 600 ~/.ssh/config
+# service sshd restart
+```
+
 ### Copy script directory to:
 ```
 # "/home/shells/"
@@ -133,27 +155,6 @@ add chain=forward in-interface-list=IDPS out-interface-list=ISP action=sniff-tzs
  - Block ip-address's from idps_alert table:
 /ip firewall raw
 add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
-```
-
-### Configuring ssh key authorization:
-```
-Create key mik_rsa:
-# cd ~/.ssh/
-# ssh-keygen -t rsa -b 2048
-- /root/.ssh/mik_rsa
-id_rsa [mik_rsa] - secret key (for the host from which we are connecting)
-id_rsa.pub [mik_rsa.pub] - public key (for the host to which we are connecting)
-```
-
-### We specify a lot of hosts through a space:
-```
-# nano ~/.ssh/config
-Host 172.16.5.89
-IdentityFile ~/.ssh/mik_rsa
-#ConnectTimeout 3
-#ServerAliveInterval 900
-# chmod 600 ~/.ssh/config
-# service sshd restart
 ```
 
 ### Thanks for the Idea:
