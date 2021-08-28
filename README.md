@@ -3,12 +3,13 @@ A simple script that processes the generated Suricata eve-log in real time and, 
 * Connects to MikroTik using ssh-key.
 * Cli commands are sent directly to the mikrotik terminal in the established session which does not close;
 * Works as a daemon with attachment to the Suricata process;
-* There is a whitelist to which "src_ip" and "signature_id" can be added;
+* There is a whitelist to which "networks" and "signature_id" can be added;
 * Marks blocked ip-addresses in the "mark_ip" file and automatically clears the file as the timestamp expires;
 * In case of errors when connecting to MikroTik, add them to "bash_cata.log".
 
 ## For work you need:
 * ./jq (https://stedolan.github.io/jq/)
+* grepcidr (http://www.pc-tools.net/unix/grepcidr/)
 * tmux (https://github.com/tmux/tmux/wiki)
 * tzsp2pcap (https://github.com/thefloweringash/tzsp2pcap)
 * tcpreplay (https://github.com/appneta/tcpreplay)
