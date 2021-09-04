@@ -57,9 +57,9 @@ check_ip () {
 check_tmux () {
     if [ "$status_ci" = "true" ]; then
         status_ct="true"
-        if ! else_error_ct="$(tmux has-session -t mbi 2>&1)"; then
+        if ! if_error_ct="$(tmux has-session -t mbi 2>&1)"; then
             status_ct="false"
-            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${else_error_ct}."
+            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_ct}."
             sed -i "/${src_ip}/d" "${mark_ip}"
             tmux new-session -d -s mbi "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${login}"@"${router}" -i "${privatekey}"" ; sleep 3s
         fi
