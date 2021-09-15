@@ -25,12 +25,6 @@ A simple script that processes the generated Suricata eve-log in real time and, 
         - alert
 ```
 
-### Secure SSH in ROS:
-```
-/ip ssh set strong-crypto=yes
-/ip ssh set always-allow-password-login=no
-```
-
 ### Configuring ssh key authorization:
 ```
 Create key mik_rsa:
@@ -162,6 +156,12 @@ add chain=forward in-interface-list=IDPS out-interface-list=ISP action=sniff-tzs
  - Block ip-address's from idps_alert table:
 /ip firewall raw
 add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
+```
+
+### Secure SSH in ROS:
+```
+/ip ssh set strong-crypto=yes
+/ip ssh set always-allow-password-login=no
 ```
 
 ### Thanks for the Idea:
