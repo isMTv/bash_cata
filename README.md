@@ -158,7 +158,7 @@ add chain=forward in-interface-list=IDPS out-interface-list=ISP action=sniff-tzs
 add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
 ```
 
-### Secure SSH in ROS:
+### Secure SSH:
 ```
 /ip ssh set strong-crypto=yes
 /ip ssh set always-allow-password-login=no
