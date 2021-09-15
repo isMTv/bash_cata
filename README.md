@@ -25,6 +25,12 @@ A simple script that processes the generated Suricata eve-log in real time and, 
         - alert
 ```
 
+### Secure SSH in ROS:
+```
+/ip ssh set strong-crypto=yes
+/ip ssh set always-allow-password-login=no
+```
+
 ### Configuring ssh key authorization:
 ```
 Create key mik_rsa:
