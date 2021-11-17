@@ -22,7 +22,7 @@ MARK_IP="${SCRIPT_DIR}/mark.ip"
 if ! tmux has-session -t mbi &> /dev/null; then
     tmux new-session -d -s mbi "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}"" &
     # wait for last background process to finish;
-    local last_pid="$!" ; wait "$tmux_cur_pid"
+    local w_pid="$!" ; wait "$w_pid"
 fi
 
 # Check files;
@@ -65,7 +65,7 @@ check_tmux () {
             sed -i "/${src_ip}/d" "${MARK_IP}"
             tmux new-session -d -s mbi "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}"" &
             # wait for last background process to finish;
-            local last_pid="$!" ; wait "$tmux_cur_pid"
+            local w_pid="$!" ; wait "$w_pid"
             
         fi
     fi
