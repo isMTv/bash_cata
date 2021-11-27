@@ -64,7 +64,7 @@ check_tmux () {
             logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_ct}."
             sed -i "/${src_ip}/d" "${MARK_IP}"
             tmux new-session -d -s mbi "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
-            sleep 1
+            sleep 2
         fi
     fi
 }
