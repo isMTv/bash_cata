@@ -5,6 +5,7 @@ A simple script that processes the generated Suricata eve-log in real time and, 
 * Works as a daemon with attachment to the Suricata process;
 * There is a whitelist to which "networks" and "signature_id" can be added;
 * Marks blocked ip-addresses in the "mark_ip" file and automatically clears the file as the timestamp expires;
+* Possebility restore address list after router reboot;
 * In case of errors when connecting to MikroTik, add them to "bash_cata.log".
 
 ## For work you need:
@@ -162,6 +163,27 @@ add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
 ```
 /ip ssh set strong-crypto=yes
 /ip ssh set always-allow-password-login=no
+```
+
+### Restore Adress List:
+SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SSH_client#SSH-exec
+```
+/system script add name="bash_cata" policy="ftp,read,write,test"
+---
+:local ip "bash_cata_ip_address";
+:if ([/ping address=$ip count=3] = 0) do={
+    /log warning message="bash_cata: host $ip - unavalable";
+    /system scheduler set bash_cata interval="00:05:00";
+} else={
+    /log warning message="bash_cata: host $ip - available";
+    /system scheduler set bash_cata interval="00:00:00";
+    /system ssh-exec address="$ip" port=22 user=root command="touch /.../.../bash_cata/mik.on";
+}
+---
+/system scheduler add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system script run bash_cata"
+---
+### Сreating a key pair in linux host::
+# mkdir mik_exec && ssh-keygen -t rsa -b 2048 -m pem
 ```
 
 ### Thanks for the Idea:
