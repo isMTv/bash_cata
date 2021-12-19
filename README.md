@@ -167,17 +167,21 @@ add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
 
 ### Restore Adress List:
 SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SSH_client#SSH-exec
+* /.../.../bash_cata/mik.on - replace with the path where the bash_cata script is located;
+* delay 25 - the time that the router will spend to turn it on completely;
+* local ip - ip address host on which the script is running;
 ```
 /system script add name="bash_cata" policy="ftp,read,write,test"
 ---
-:local ip "bash_cata_ip_address";
+:delay 25;
+:local ip "ip_bash_cata_script
 :if ([/ping address=$ip count=3] = 0) do={
     /log warning message="bash_cata: host $ip - unavalable";
-    /system scheduler set bash_cata interval="00:05:00";
+    /system scheduler set bash_cata interval="00:04:35";
 } else={
     /log warning message="bash_cata: host $ip - available";
     /system scheduler set bash_cata interval="00:00:00";
-    /system ssh-exec address="$ip" port=22 user=root command="touch /.../.../bash_cata/mik.on";
+    /system ssh-exec address="$ip" port=22 user=root command="touch /.../.../bash_cata/mik.on ; systemctl restart bashcata.service";
 }
 ---
 /system scheduler add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system script run bash_cata"
