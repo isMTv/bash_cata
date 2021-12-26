@@ -49,7 +49,7 @@ check_list () {
 check_ip () {
     status_check_ip="false"
     check_timestamp="$(awk -v t=$(date -d"-${FW_TIMEOUT} day" +%Y-%m-%dT%H:%M:%S) '$2<t' "${MARK_IP}")"
-    for cts in $check_timestamp ; do sed -i "/${cts}/d" "${MARK_IP}" ; done
+    IFS=$'\n' ; for cts in $check_timestamp ; do sed -i "/${cts%%,*}/d" "${MARK_IP}" ; done
     if ! grep -q "${src_ip}" "${MARK_IP}"; then
         status_check_ip="true"
         comment_list=":: $dest_ip:$dest_port/$proto :: [$signature_id] :: $signature :: $category ::"
