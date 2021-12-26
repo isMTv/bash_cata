@@ -98,7 +98,7 @@ Name=tzsp*
 MTUBytes=2000
 
 [Network]
-Address=172.17.1.1/24
+Address=172.16.255.249/29
 DHCP=no
 ```
 
