@@ -20,6 +20,7 @@ ALERTS_FILE="/var/log/suricata/alerts.json"
 PID_SURICATA="$(pidof suricata)"
 MARK_IP="${SCRIPT_DIR}/mark.ip"
 MIK_ON="${SCRIPT_DIR}/mik.on"
+RSC_LIST="${SCRIPT_DIR}/${FW_LIST}.rsc"
 # - #
 
 # Initialization TMUX session;
@@ -33,16 +34,16 @@ fi
 [ -e "${MARK_IP}" ] || touch "${MARK_IP}"
 
 # Setting the logger utility function;
-function logger() {
+function logger () {
     find "${SCRIPT_DIR:?}"/ -maxdepth 1 -name "*.log" -size +100k -exec rm -f {} \;
-    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"bash_cata.log"
+    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"{0%.sh}.log"
 }
 
 # WhiteList's;
 check_list () {
     status_check_list_net="false" ; status_check_list_sig="false"
-    if grepcidr "${WHITELIST_NETWORKS}" <(echo "${src_ip}") > /dev/null; then status_check_list_net="true" ; fi
-    if grep -q -E "(^|\s+)${signature_id}\b" <<< "${WHITELIST_SIGNATURE_ID}"; then status_check_list_sig="true" ; fi
+    if grepcidr "${WHITELIST_NETWORKS}" <(echo "${src_ip}") > /dev/null ; then status_check_list_net="true" ; fi
+    if grep -q -E "(^|\s+)${signature_id}\b" <<< "${WHITELIST_SIGNATURE_ID}" ; then status_check_list_sig="true" ; fi
 }
 
 # Mark IP;
@@ -71,21 +72,13 @@ check_tmux () {
     fi
 }
 
-# Ban IP;
-mik_ban_ip () {
-    # both conditions must be true;
-    if [[ "$status_check_ip" = "true" && "$status_check_tmux" = "true" ]]; then
-        #echo ":: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::"
-        cmd_mik_ban_ip='/ip firewall address-list add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'$comment_list'"'
-        tmux send-keys -t bash_cata "${cmd_mik_ban_ip}" Enter
-    fi
-}
-
 # Restore Address List;
 restore_address_list () {
+    status_restore_address_list="false"
     [ "$FW_LIST_RESTORE" = "true" ] &&
     # both conditions must be true;
     if [[ -e "$MIK_ON" && "tmux has-session -t bash_cata" ]]; then
+        echo "/ip firewall address-list" > "${RSC_LIST}"
         time_zone="$(date +%z)"; sec_cur_date="$(date -d"${time_zone::+3}hour +${time_zone:3}min" +%s)"
         get_mark_ip="$(cat $MARK_IP)" ; IFS=$'\n'
         for mark_ip in $get_mark_ip; do
@@ -94,10 +87,27 @@ restore_address_list () {
             sec_work="$(( $sec_cur_date - $sec_timestamp ))"
             sec_left="$(( $FW_TIMEOUT * 86400 - $sec_work ))"
             days_left="$(date -d "@$sec_left" "+$(($sec_left/86400))d%H:%M:%S")"
-            cmd_restore_list='/ip firewall address-list add list="'${FW_LIST}'" address="'${r_src_ip}'" timeout="'${days_left}'" comment="'${r_comment_list#* }'"'
-            tmux send-keys -t bash_cata "${cmd_restore_list}" Enter
+            cmd_restore_list='add list="'${FW_LIST}'" address="'${r_src_ip}'" timeout="'${days_left}'" comment="'${r_comment_list#* }'"'
+            echo "${cmd_restore_list}" >> "${RSC_LIST}"
         done
-        [ -e "$MIK_ON" ] && rm "${MIK_ON:?}"
+        if if_error_scp="$(scp -i "${PRIV_KEY}" -o ConnectTimeout=3 "${RSC_LIST}" "${LOGIN}"@"${ROUTER}":"/" 2>&1)"; then
+            status_restore_address_list="true"
+            cmd_import_res_list='/import '${FW_LIST}'.rsc ; /file remove '${FW_LIST}'.rsc'
+            sleep 3 ; tmux send-keys -t bash_cata "${cmd_import_res_list}" Enter
+            [ -e "$MIK_ON" ] && rm "${MIK_ON:?}"
+        else
+            logger "[!] [@restore_address_list] — [:: scp ::] — Error - ${if_error_scp}."
+        fi
+    fi
+}
+
+# Ban IP;
+mik_ban_ip () {
+    # both conditions must be true;
+    if [[ "$status_check_ip" = "true" && "$status_check_tmux" = "true" ]]; then
+        #echo ":: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::"
+        cmd_mik_ban_ip='/ip firewall address-list add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'$comment_list'"'
+        sleep 0.1 ; tmux send-keys -t bash_cata "${cmd_mik_ban_ip}" Enter
     fi
 }
 
@@ -109,10 +119,11 @@ tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; d
     for alert in $alerts; do
         IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
         # one of the conditions must be true;
-        check_list ; if [[ "$status_check_list_net" = "true" || "$status_check_list_sig" = "true" ]] ; then continue ; fi
+        check_list ; [[ "$status_check_list_net" = "true" || "$status_check_list_sig" = "true" ]] && continue
         check_ip
         check_tmux
+        # one conditions must be true;
+        restore_address_list ; [ "$status_restore_address_list" = "true" ] && continue
         mik_ban_ip
-        restore_address_list
     done
 done
