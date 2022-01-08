@@ -36,7 +36,7 @@ fi
 # Setting the logger utility function;
 function logger () {
     find "${SCRIPT_DIR:?}"/ -maxdepth 1 -name "*.log" -size +100k -exec rm -f {} \;
-    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"{0%.sh}.log"
+    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"${0%.sh}.log"
 }
 
 # WhiteList's;
