@@ -24,10 +24,10 @@ RSC_LIST="${SCRIPT_DIR}/${FW_LIST}.rsc"
 # - #
 
 # Initialization TMUX session;
+# only in this order (tmux, sleep);
 if ! tmux has-session -t bash_cata &> /dev/null; then
-    tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}"" &
-    # wait for last background process to finish;
-    w_pid="$!" ; wait "$w_pid"
+    tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
+    sleep 3
 fi
 
 # Check files;
@@ -39,61 +39,35 @@ function logger () {
     echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"${0%.sh}.log"
 }
 
-# WhiteList's;
-check_list () {
-    status_check_list_net="false" ; status_check_list_sig="false"
-    if grepcidr "${WHITELIST_NETWORKS}" <(echo "${src_ip}") > /dev/null ; then status_check_list_net="true" ; fi
-    if grep -q -E "(^|\s+)${signature_id}\b" <<< "${WHITELIST_SIGNATURE_ID}" ; then status_check_list_sig="true" ; fi
-}
-
-# Mark IP;
-check_ip () {
-    status_check_ip="false"
-    check_timestamp="$(awk -v t=$(date -d"-${FW_TIMEOUT} day" +%Y-%m-%dT%H:%M:%S) '$2<t' "${MARK_IP}")"
-    IFS=$'\n' ; for cts in $check_timestamp ; do sed -i "/${cts%%,*}/d" "${MARK_IP}" ; done
-    if ! grep -q "${src_ip}" "${MARK_IP}"; then
-        status_check_ip="true"
-        comment_list=":: $dest_ip:$dest_port/$proto :: [$signature_id] :: $signature :: $category ::"
-        echo "${src_ip}, ${timestamp::-12}, ${comment_list}" >> "${MARK_IP}"
-    fi
-}
-
-# Check Tmux Session;
-check_tmux () {
-    if [ "$status_check_ip" = "true" ]; then
-        status_check_tmux="true"
-        if ! if_error_check_tmux="$(tmux has-session -t bash_cata 2>&1)"; then
-            status_check_tmux="false"
-            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_check_tmux}."
-            sed -i "/${src_ip}/d" "${MARK_IP}"
-            tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
-            sleep 2
-        fi
-    fi
+# Purge Mark IP on Timestamp;
+purge_mark_ip () {
+    IFS=$'\n'
+    for purge_mark_ip_timestamp in $(awk -v t=$(date -d"-${FW_TIMEOUT} day" +%Y-%m-%dT%H:%M:%S) '$2<t' "${MARK_IP}"); do
+        sed -i "/${purge_mark_ip_timestamp%%,*}/d" "${MARK_IP}"
+    done
 }
 
 # Restore Address List;
 restore_address_list () {
-    status_restore_address_list="false"
     [ "$FW_LIST_RESTORE" = "true" ] &&
-    # both conditions must be true;
-    if [[ -e "$MIK_ON" && "tmux has-session -t bash_cata" ]]; then
+    if [ -e "$MIK_ON" ]; then
         echo "/ip firewall address-list" > "${RSC_LIST}"
         time_zone="$(date +%z)"; sec_cur_date="$(date -d"${time_zone::+3}hour +${time_zone:3}min" +%s)"
-        get_mark_ip="$(cat $MARK_IP)" ; IFS=$'\n'
-        for mark_ip in $get_mark_ip; do
-            IFS="," read -r r_src_ip r_timestamp r_comment_list <<< "$mark_ip"
+        IFS=$'\n'
+        # days left from MARK_IP;
+        for restore_mark_ip in $(< $MARK_IP); do
+            IFS="," read -r r_src_ip r_timestamp r_comment_list <<< "$restore_mark_ip"
             sec_timestamp="$(date -d"$r_timestamp" +%s)"
             sec_work="$(( $sec_cur_date - $sec_timestamp ))"
             sec_left="$(( $FW_TIMEOUT * 86400 - $sec_work ))"
             days_left="$(date -d "@$sec_left" "+$(($sec_left/86400))d%H:%M:%S")"
-            cmd_restore_list='add list="'${FW_LIST}'" address="'${r_src_ip}'" timeout="'${days_left}'" comment="'${r_comment_list#* }'"'
-            echo "${cmd_restore_list}" >> "${RSC_LIST}"
+            cmd_rsc_list='add list="'${FW_LIST}'" address="'${r_src_ip}'" timeout="'${days_left}'" comment="'${r_comment_list#* }'"'
+            echo "${cmd_rsc_list}" >> "${RSC_LIST}"
         done
+        # import rsc file in mik;
         if if_error_scp="$(scp -i "${PRIV_KEY}" -o ConnectTimeout=3 "${RSC_LIST}" "${LOGIN}"@"${ROUTER}":"/" 2>&1)"; then
-            status_restore_address_list="true"
-            cmd_import_res_list='/import '${FW_LIST}'.rsc ; /file remove '${FW_LIST}'.rsc'
-            sleep 3 ; tmux send-keys -t bash_cata "${cmd_import_res_list}" Enter
+            cmd_import_rsc_list='/import '${FW_LIST}'.rsc ; /file remove '${FW_LIST}'.rsc'
+            sleep 3 ; tmux send-keys -t bash_cata "${cmd_import_rsc_list}" Enter
             [ -e "$MIK_ON" ] && rm "${MIK_ON:?}"
         else
             logger "[!] [@restore_address_list] — [:: scp ::] — Error - ${if_error_scp}."
@@ -101,15 +75,65 @@ restore_address_list () {
     fi
 }
 
-# Ban IP;
+# WhiteList's;
+white_list () {
+    # white ip's;
+    if grepcidr "${WHITELIST_NETWORKS}" <(echo "${src_ip}") > /dev/null; then
+        white_list_net="true"
+    else
+        white_list_net="false"
+    fi
+    # white sig's;
+    if grep -q -E "(^|\s+)${signature_id}\b" <<< "${WHITELIST_SIGNATURE_ID}"; then
+        white_list_sig="true"
+    else
+        white_list_sig="false"
+    fi
+}
+
+# Mark IP;
+mark_ip () {
+    if ! grep -q "${src_ip}" "${MARK_IP}"; then
+        mark_ip_new="true"
+        mark_ip_comment=":: $dest_ip:$dest_port/$proto :: [$signature_id] :: $signature :: $category ::"
+        echo "${src_ip}, ${timestamp::-12}, ${mark_ip_comment}" >> "${MARK_IP}"
+    else
+        mark_ip_new="false"
+    fi
+}
+
+# Check Tmux Session;
+check_tmux () {
+    if [ "$mark_ip_new" = "true" ]; then
+        if ! if_error_check_tmux="$(tmux has-session -t bash_cata 2>&1)"; then
+            check_tmux_session="false"
+            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_check_tmux}."
+            sed -i "/${src_ip}/d" "${MARK_IP}"
+            # only in this order (tmux, sleep);
+            if ! tmux has-session -t bash_cata &> /dev/null; then
+                tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
+                sleep 60
+            fi
+        else
+            check_tmux_session="true"
+        fi
+    fi
+}
+
+# Mik Ban IP;
 mik_ban_ip () {
     # both conditions must be true;
-    if [[ "$status_check_ip" = "true" && "$status_check_tmux" = "true" ]]; then
+    if [[ "$mark_ip_new" = "true" && "$check_tmux_session" = "true" ]]; then
         #echo ":: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::"
-        cmd_mik_ban_ip='/ip firewall address-list add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'$comment_list'"'
+        cmd_mik_ban_ip='/ip firewall address-list add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'${mark_ip_comment}'"'
         sleep 0.1 ; tmux send-keys -t bash_cata "${cmd_mik_ban_ip}" Enter
     fi
 }
+
+# Check Zero ALERTS_FILE Size;
+if [ ! -s "$ALERTS_FILE" ]; then
+    purge_mark_ip ; restore_address_list
+fi
 
 # Tail Conveyor;
 tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; do
@@ -118,12 +142,12 @@ tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; d
     IFS=$'\n'
     for alert in $alerts; do
         IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
+        purge_mark_ip
+        restore_address_list
         # one of the conditions must be true;
-        check_list ; [[ "$status_check_list_net" = "true" || "$status_check_list_sig" = "true" ]] && continue
-        check_ip
+        white_list ; [[ "$white_list_net" = "true" || "$white_list_sig" = "true" ]] && continue
+        mark_ip
         check_tmux
-        # one conditions must be true;
-        restore_address_list ; [ "$status_restore_address_list" = "true" ] && continue
         mik_ban_ip
     done
 done
