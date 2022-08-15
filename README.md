@@ -187,7 +187,7 @@ SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SS
 /system scheduler add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system script run bash_cata"
 ---
 ### Сreating a key pair in linux host::
-# mkdir mik_exec && ssh-keygen -t rsa -b 2048 -m pem
+# mkdir mik_exec && cd mik_exec && ssh-keygen -t rsa -b 2048 -m pem
 ```
 
 ### Thanks for the Idea:
