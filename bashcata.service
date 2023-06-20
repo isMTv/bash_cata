@@ -1,12 +1,10 @@
 [Unit]
 Description=Script bashcata to MikroTik
-After=network.target network-online.target
+After=suricata.service
 
 [Service]
 Type=simple
 ExecStart=/home/shells/bash_cata/bash_cata.sh
-Restart=always
-RestartSec=3
 
 [Install]
 WantedBy=multi-user.target

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 #
+# bash_cata v1.0;
+#
 # required packages: jq, grepcidr, tmux;
 #
 # Bashcata Variables;
 ROUTER="" # mikrotik ip;
 LOGIN="idps" # user for connect to mikrotik;
-PRIVATEKEY="/root/.ssh/mik_rsa" # private key for ssh;
+PRIVATEKEY="/root/.ssh/idps_rsa" # private key for ssh;
 FW_LIST="idps_alert" # name firewall list;
-FW_TIMEOUT="7" # days ban ip;
+FW_TIMEOUT="28" # days ban ip;
 FW_LIST_RESTORE="false" # restore address list after router reboot;
 WHITELIST_NETWORKS="1.1.1.1 1.1.1.2 \
 2.2.2.0/19 3.3.3.0/29 \
@@ -51,7 +53,8 @@ purge_mark_ip () {
 restore_address_list () {
     [ "$FW_LIST_RESTORE" = "true" ] &&
     if [ -e "$MIK_ON" ]; then
-        echo "/ip firewall address-list" > "${RSC_LIST}"
+        purge_mark_ip
+        echo "/ip/firewall/address-list/" > "${RSC_LIST}"
         time_zone="$(date +%z)"; sec_cur_date="$(date -d"${time_zone::+3}hour +${time_zone:3}min" +%s)"
         IFS=$'\n'
         # days left from MARK_IP;
@@ -65,8 +68,8 @@ restore_address_list () {
             echo "${cmd_rsc_list}" >> "${RSC_LIST}"
         done
         # import rsc file in mik;
-        if if_error_scp="$(scp -i "${PRIV_KEY}" -o ConnectTimeout=3 "${RSC_LIST}" "${LOGIN}"@"${ROUTER}":"/" 2>&1)"; then
-            cmd_import_rsc_list='/import '${FW_LIST}'.rsc ; /file remove '${FW_LIST}'.rsc'
+        if if_error_scp="$(scp -i "${PRIV_KEY}" -o ConnectTimeout=3 "${RSC_LIST}" "${LOGIN}"@"${ROUTER}":"/ram-disk" 2>&1)"; then
+            cmd_import_rsc_list='/import ram-disk/'${FW_LIST}'.rsc ; /file/remove ram-disk/'${FW_LIST}'.rsc'
             sleep 3 ; tmux send-keys -t bash_cata "${cmd_import_rsc_list}" Enter
             [ -e "$MIK_ON" ] && rm "${MIK_ON:?}"
         else
@@ -125,29 +128,34 @@ mik_ban_ip () {
     # both conditions must be true;
     if [[ "$mark_ip_new" = "true" && "$check_tmux_session" = "true" ]]; then
         #echo ":: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::"
-        cmd_mik_ban_ip='/ip firewall address-list add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'${mark_ip_comment}'"'
+        cmd_mik_ban_ip='/ip/firewall/address-list/add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'${mark_ip_comment}'"'
         sleep 0.1 ; tmux send-keys -t bash_cata "${cmd_mik_ban_ip}" Enter
     fi
 }
 
-# Check Zero ALERTS_FILE Size;
-if [ ! -s "$ALERTS_FILE" ]; then
-    purge_mark_ip ; restore_address_list
-fi
-
 # Tail Conveyor;
-tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; do
-    # Parsing Json file via jq;
-    alerts="$(echo "${LINE}" | jq -c '[.timestamp, .src_ip, .dest_ip, .dest_port, .proto, .alert .signature_id, .alert .signature, .alert .category]' | sed 's/^.//g; s/"//g; s/]//g')"
-    IFS=$'\n'
-    for alert in $alerts; do
-        IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
-        purge_mark_ip
-        restore_address_list
-        # one of the conditions must be true;
-        white_list ; [[ "$white_list_net" = "true" || "$white_list_sig" = "true" ]] && continue
-        mark_ip
-        check_tmux
-        mik_ban_ip
+tail_conveyor () {
+    tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; do
+        # Parsing Json file via jq;
+        alerts="$(echo "${LINE}" | jq -c '[.timestamp, .src_ip, .dest_ip, .dest_port, .proto, .alert .signature_id, .alert .signature, .alert .category]' | sed 's/^.//g; s/"//g; s/]//g')"
+        IFS=$'\n'
+        for alert in $alerts; do
+            IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
+            purge_mark_ip
+            # one of the conditions must be true;
+            white_list ; [[ "$white_list_net" = "true" || "$white_list_sig" = "true" ]] && continue
+            mark_ip
+            check_tmux
+            mik_ban_ip
+        done
     done
-done
+}
+
+# Script Initialization;
+main () {
+    restore_address_list
+    tail_conveyor
+}
+
+# Running Script;
+main
