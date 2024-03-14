@@ -185,7 +185,7 @@ SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SS
     /system/ssh-exec address="$ip" port=22 user=root command="touch /.../.../bash_cata/mik.on ; systemctl restart bashcata.service";
 }
 ---
-/system/scheduler/add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system/script/run bash_cata"
+/system/scheduler/add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="bash_cata"
 /system/scheduler/add name="ram_disk" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/disk/add type=tmpfs tmpfs-max-size=3M slot=ram-disk"
 ---
 ### Сreating a key pair in linux host:
