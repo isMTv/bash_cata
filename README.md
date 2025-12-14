@@ -30,22 +30,25 @@ A simple script that processes the generated Suricata eve-log in real time and, 
 ```
 Create key pair idps_rsa:
 # cd ~/.ssh/
-# ssh-keygen -t rsa -b 2048 -f idps_rsa
-- /root/.ssh/idps_rsa.*
-idps_rsa - secret key (for the host from which we are connecting)
-idps_rsa.pub - public key (for the host to which we are connecting)
+ - ed25519:
+# ssh-keygen -t ed25519 -f idps_ed25519 -C idps
+ - rsa:
+# ssh-keygen -t rsa -b 2048 -f idps_rsa -C idps
+- /root/.ssh/idps_ed25519
+[idps_ed25519] - secret key (for the host from which we are connecting)
+[idps_ed25519.pub] - public key (for the host to which we are connecting)
 ```
 
 ### We specify a lot of hosts through a space:
 ```
 # nano ~/.ssh/config
 Host 172.16.5.3
-IdentityFile ~/.ssh/mik_rsa
+IdentityFile ~/.ssh/idps_ed25519
 #ConnectTimeout 3
 #ServerAliveInterval 900
 
 # chmod 600 ~/.ssh/config
-# service sshd restart
+# systemctl restart sshd.service
 ```
 
 ### Copy script directory to:
@@ -58,39 +61,37 @@ IdentityFile ~/.ssh/mik_rsa
 ```
 # cp bashcata.service /etc/systemd/system/
 # systemctl daemon-reload
-# systemctl enable bashcata.service
-# systemctl start bashcata.service
-# systemctl status bashcata.service
+# systemctl enable --now bashcata.service && systemctl status bashcata.service
 ```
 
 ### Logrotate: option required "copytruncate"
-cp suricata /etc/logrotate.d/
 ```
-# Sample /etc/logrotate.d/suricata configuration file.
-/var/log/suricata/*.log /var/log/suricata/*.json {
-    daily
-    missingok
+# cp suricata /etc/logrotate.d/
+/var/log/suricata/*.log
+/var/log/suricata/*.json
+{
+    weekly
     rotate 3
+    missingok
     compress
-    delaycompress
     copytruncate
     sharedscripts
     postrotate
-        /bin/kill -HUP `cat /run/suricata.pid 2> /dev/null` 2> /dev/null || true
+        /usr/bin/kill -HUP $(cat /var/run/suricata/suricata.pid)
     endscript
 }
 ```
 
-### snif TZSP:
-cp tzsp.netdev /etc/systemd/network/
+### Snif TZSP:
 ```
+# cp tzsp.netdev /etc/systemd/network/
 [NetDev]
 Name=tzsp0
 Kind=dummy
 ```
 
-cp tzsp.network /etc/systemd/network/
 ```
+# cp tzsp.network /etc/systemd/network/
 [Match]
 Name=tzsp*
 
@@ -110,8 +111,8 @@ Enable interface:
 
 Combine tzsp2pcap and tcpreplay into TZSPreplay@.service:
 
-cp TZSPreplay@.service /etc/systemd/system/
 ```
+# cp TZSPreplay@.service /etc/systemd/system/
 [Unit]
 Description=TZSP Replay on dev %i
 After=network.target network-online.target
@@ -119,7 +120,7 @@ Requires=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c "/usr/bin/tzsp2pcap -f | /usr/bin/tcpreplay-edit --topspeed --mtu=$(cat /sys/class/net/%I/mtu) --mtu-trunc -i %I -"
+ExecStart=/bin/sh -c "/usr/local/bin/tzsp2pcap -f | /usr/local/bin/tcpreplay-edit --topspeed --mtu=$(cat /sys/class/net/%I/mtu) --mtu-trunc -i %I -"
 Restart=always
 RestartSec=3
 ProtectSystem=full
@@ -148,16 +149,16 @@ In the "prerouting" chain we direct traffic to Suricata's ip-address. We can spe
 add list=idps_fwd address=ip-to-monitoring
  - Adding rules TSZP Sniff:
 /ip/firewall/mangle/
-add chain=forward in-interface-list=ISP dst-address-list=idps_fwd action=sniff-tzsp sniff-target=ip-address-suricata sniff-target-port=37008 comment="TZSP sniffing -> IDPS"
-add chain=forward out-interface-list=ISP src-address-list=idps_fwd action=sniff-tzsp sniff-target=ip-address-suricata sniff-target-port=37008
+add chain=forward in-interface-list=isp dst-address-list=idps_fwd action=sniff-tzsp sniff-target=172.16.5.98 sniff-target-port=37008 comment="tzsp sniffing -> idps"
+add chain=forward out-interface-list=isp src-address-list=idps_fwd action=sniff-tzsp sniff-target=172.16.5.98 sniff-target-port=37008
  - Or using marking connection/packet:
-add chain=prerouting in-interface-list=ISP protocol=tcp dst-port=443,25,143,587,5222,5281 connection-state=new action=mark-connection new-connection-mark=idps_conn comment="TZSP sniffing -> IDPS"
-add chain=prerouting in-interface-list=ISP protocol=udp dst-port=3478 connection-state=new action=mark-connection new-connection-mark=idps_conn
+add chain=prerouting in-interface-list=isp protocol=tcp dst-port=443,49100,49101,49102 connection-state=new action=mark-connection new-connection-mark=idps_conn comment="tzsp sniffing -> idps"
+add chain=prerouting in-interface-list=isp protocol=udp dst-port=443,49099 connection-state=new action=mark-connection new-connection-mark=idps_conn
 add chain=forward connection-mark=idps_conn action=mark-packet new-packet-mark=idps_pack
-add chain=forward packet-mark=idps_pack action=sniff-tzsp sniff-target=ip-address-suricata sniff-target-port=37008
+add chain=forward packet-mark=idps_pack action=sniff-tzsp sniff-target=172.16.5.98 sniff-target-port=37008
  - Block ip-address's from idps_alert table:
 /ip/firewall/raw/
-add chain=prerouting src-address-list=idps_alert action=drop comment="Drop IDPS"
+add chain=prerouting src-address-list=idps_alert action=drop comment="IDPS"
 ```
 
 ### Secure SSH:
@@ -175,21 +176,22 @@ SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SS
 /system/script/add name="bash_cata" policy="ftp,read,write,test"
 ---
 :delay 25;
-:local ip "ip_bash_cata_script";
+:local ip "172.16.5.98";
 :if ([/ping address=$ip count=3] = 0) do={
     /log warning message="bash_cata: host $ip - unavalable";
     /system/scheduler/set bash_cata interval="00:04:35";
 } else={
     /log/warning message="bash_cata: host $ip - available";
     /system/scheduler/set bash_cata interval="00:00:00";
-    /system/ssh-exec address="$ip" port=22 user=root command="touch /.../.../bash_cata/mik.on ; systemctl restart bashcata.service";
+    /system/ssh-exec address="$ip" port=22 user=root command="touch /home/shells/bash_cata/mik.on ; systemctl restart bashcata.service";
 }
 ---
-/system/scheduler/add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="bash_cata"
-/system/scheduler/add name="ram_disk" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/disk/add type=tmpfs tmpfs-max-size=3M slot=ram-disk"
+/system/scheduler/add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system/script/run bash_cata"
+/system/scheduler/add name="ram_disk" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event=":delay 15; /disk/add type=tmpfs tmpfs-max-size=3M slot=ram-disk"
 ---
 ### Сreating a key pair in linux host:
-# mkdir mik_exec && cd mik_exec && ssh-keygen -t rsa -b 2048 -m pem -f mik_exec_rsa
+ - rsa:
+# mkdir mik_exec && cd mik_exec && ssh-keygen -t rsa -b 2048 -m pem -f mik_exec_rsa -C mik_exec_rsa
 ```
 
 ### Thanks for the Idea:
