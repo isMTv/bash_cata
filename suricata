@@ -1,13 +1,13 @@
-# Sample /etc/logrotate.d/suricata configuration file.
-/var/log/suricata/*.log /var/log/suricata/*.json {
-	daily
-	missingok
+/var/log/suricata/*.log
+/var/log/suricata/*.json
+{
+    weekly
 	rotate 3
+	missingok
 	compress
-	delaycompress
 	copytruncate
 	sharedscripts
 	postrotate
-		/bin/kill -HUP `cat /run/suricata.pid 2> /dev/null` 2> /dev/null || true
+		/usr/bin/kill -HUP $(cat /var/run/suricata/suricata.pid)
 	endscript
 }
