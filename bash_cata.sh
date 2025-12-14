@@ -7,7 +7,7 @@
 # Bashcata Variables;
 ROUTER="" # mikrotik ip;
 LOGIN="idps" # user for connect to mikrotik;
-PRIVATEKEY="/root/.ssh/idps_rsa" # private key for ssh;
+PRIVATEKEY="/root/.ssh/idps_ed25519" # private key for ssh;
 FW_LIST="idps_alert" # name firewall list;
 FW_TIMEOUT="28" # days ban ip;
 FW_LIST_RESTORE="false" # restore address list after router reboot;
