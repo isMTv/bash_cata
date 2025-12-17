@@ -82,17 +82,11 @@ restore_address_list () {
 # WhiteList's;
 white_list () {
     # white ip's;
-    if grepcidr "${WHITELIST_NETWORKS}" <(echo "${src_ip}") > /dev/null; then
-        white_list_net="true"
-    else
-        white_list_net="false"
-    fi
+    grepcidr "${WHITELIST_NETWORKS}" <<< "${src_ip}" > /dev/null && return 0
     # white sig's;
-    if grep -q -E "(^|\s+)${signature_id}\b" <<< "${WHITELIST_SIGNATURE_ID}"; then
-        white_list_sig="true"
-    else
-        white_list_sig="false"
-    fi
+    grep -qw -- "${signature_id}" <<< "${WHITELIST_SIGNATURE_ID}" && return 0
+    # no matches;
+    return 1
 }
 
 # Mark IP;
@@ -139,8 +133,7 @@ tail_conveyor () {
         for alert in $alerts; do
             IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
             purge_mark_ip
-            # one of the conditions must be true;
-            white_list ; [[ "$white_list_net" = "true" || "$white_list_sig" = "true" ]] && continue
+            white_list && continue
             mik_ban_ip
         done
     done
@@ -153,4 +146,5 @@ main () {
 }
 
 # Running Script;
+main
 main
