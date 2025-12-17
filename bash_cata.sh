@@ -14,7 +14,7 @@ FW_LIST_RESTORE="false" # restore address list after router reboot;
 WHITELIST_NETWORKS="1.1.1.1 1.1.1.2 \
 2.2.2.0/19 3.3.3.0/29 \
 4.4.4.4-4.4.5.5" # networks: a.b.c.d/xy, a.b.c.d-e.f.g.h, a.b.c.d;
-WHITELIST_SIGNATURE_ID="" # suricata signature_id: through a space;
+WHITELIST_SIGNATURE_ID="" # suricata signature_id: 123 1:222 321;
 
 # - #
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
