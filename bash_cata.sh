@@ -18,6 +18,7 @@ WHITELIST_SIGNATURE_ID="" # suricata signature_id: through a space;
 
 # - #
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+SCRIPT_NAME="$(basename "$(realpath "$0")" .sh)"
 ALERTS_FILE="/var/log/suricata/alerts.json"
 PID_SURICATA="$(pidof suricata)"
 MARK_IP="${SCRIPT_DIR}/mark.ip"
@@ -37,8 +38,8 @@ fi
 
 # Setting the logger utility function;
 function logger () {
-    find "${SCRIPT_DIR:?}"/ -maxdepth 1 -name "*.log" -size +100k -exec rm -f {} \;
-    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"${0%.sh}.log"
+    find "${SCRIPT_DIR:?}"/ -maxdepth 1 -name "*.log" -size +100k -exec rm -f {} +
+    echo -e "[$(date "+%d.%m.%Y / %H:%M:%S")]: $1" >> "${SCRIPT_DIR}"/"${SCRIPT_NAME}.log"
 }
 
 # Purge Mark IP on Timestamp;
@@ -97,36 +98,32 @@ white_list () {
 # Mark IP;
 mark_ip () {
     if ! grep -q "${src_ip}" "${MARK_IP}"; then
-        mark_ip_new="true"
         mark_ip_comment=":: $dest_ip:$dest_port/$proto :: [$signature_id] :: $signature :: $category ::"
         echo "${src_ip}, ${timestamp::-12}, ${mark_ip_comment}" >> "${MARK_IP}"
+        return 0
     else
-        mark_ip_new="false"
+        return 1
     fi
 }
 
 # Check Tmux Session;
 check_tmux () {
-    if [ "$mark_ip_new" = "true" ]; then
-        if ! if_error_check_tmux="$(tmux has-session -t bash_cata 2>&1)"; then
-            check_tmux_session="false"
-            logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_check_tmux}."
-            sed -i "/${src_ip}/d" "${MARK_IP}"
-            # only in this order (tmux, sleep);
-            if ! tmux has-session -t bash_cata &> /dev/null; then
-                tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
-                sleep 60
-            fi
-        else
-            check_tmux_session="true"
-        fi
+    if ! if_error_check_tmux="$(tmux has-session -t bash_cata 2>&1)"; then
+        logger "[!] [@check_tmux] — [:: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::] — Error - ${if_error_check_tmux}."
+        sed -i "/${src_ip}/d" "${MARK_IP}"
+        # only in this order (tmux, sleep);
+        tmux new-session -d -s bash_cata "ssh -o ConnectTimeout=3 -o ServerAliveInterval=900 "${LOGIN}"@"${ROUTER}" -i "${PRIVATEKEY}""
+        sleep 60
+        return 1
+    else
+        return 0
     fi
 }
 
 # Mik Ban IP;
 mik_ban_ip () {
     # both conditions must be true;
-    if [[ "$mark_ip_new" = "true" && "$check_tmux_session" = "true" ]]; then
+    if mark_ip && check_tmux; then
         #echo ":: $src_ip :: $dest_ip:$dest_port/$proto :: $signature_id ::"
         cmd_mik_ban_ip='/ip/firewall/address-list/add list="'${FW_LIST}'" address="'${src_ip}'" timeout="'${FW_TIMEOUT}d'" comment="'${mark_ip_comment}'"'
         sleep 0.1 ; tmux send-keys -t bash_cata "${cmd_mik_ban_ip}" Enter
@@ -144,8 +141,6 @@ tail_conveyor () {
             purge_mark_ip
             # one of the conditions must be true;
             white_list ; [[ "$white_list_net" = "true" || "$white_list_sig" = "true" ]] && continue
-            mark_ip
-            check_tmux
             mik_ban_ip
         done
     done
