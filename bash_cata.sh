@@ -5,16 +5,17 @@
 # required packages: jq, grepcidr, tmux;
 #
 # Bashcata Variables;
-ROUTER="" # mikrotik ip;
+ROUTER="172.16.5.3" # mikrotik ip;
 LOGIN="idps" # user for connect to mikrotik;
 PRIVATEKEY="/root/.ssh/idps_ed25519" # private key for ssh;
 FW_LIST="idps_alert" # name firewall list;
 FW_TIMEOUT="28" # days ban ip;
-FW_LIST_RESTORE="false" # restore address list after router reboot;
-WHITELIST_NETWORKS="1.1.1.1 1.1.1.2 \
-2.2.2.0/19 3.3.3.0/29 \
-4.4.4.4-4.4.5.5" # networks: a.b.c.d/xy, a.b.c.d-e.f.g.h, a.b.c.d;
-WHITELIST_SIGNATURE_ID="" # suricata signature_id: 123 1:222 321;
+FW_LIST_RESTORE="true" # restore address list after router reboot;
+WHITELIST_NETWORKS="172.16.5.10 172.16.5.242 172.17.5.4 192.168.0.74 \
+172.16.5.74 \
+172.16.255.0/29 172.16.255.8/29" # networks: a.b.c.d/xy, a.b.c.d-e.f.g.h, a.b.c.d;
+WHITELIST_SIGNATURE_ID="" # suricata signature_id: xxx x:xxx xxx;
+PURGE_MARK_IP_TIMEOUT="6" # every x hours;
 
 # - #
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -44,10 +45,8 @@ function logger () {
 
 # Purge Mark IP on Timestamp;
 purge_mark_ip () {
-    IFS=$'\n'
-    for purge_mark_ip_timestamp in $(awk -v t=$(date -d"-${FW_TIMEOUT} day" +%Y-%m-%dT%H:%M:%S) '$2<t' "${MARK_IP}"); do
-        sed -i "/${purge_mark_ip_timestamp%%,*}/d" "${MARK_IP}"
-    done
+    local cutdate ; cutdate=$(date -d"-${FW_TIMEOUT} day" +%Y-%m-%dT%H:%M:%S)
+    awk -v t="$cutdate" '$2 >= t' "${MARK_IP}" > "${MARK_IP}.tmp" && mv -- "${MARK_IP}.tmp" "${MARK_IP}"
 }
 
 # Restore Address List;
@@ -126,16 +125,15 @@ mik_ban_ip () {
 
 # Tail Conveyor;
 tail_conveyor () {
+    local time_purge_last="0"
+    local time_purge_now
     tail -q -f "${ALERTS_FILE}" --pid="$PID_SURICATA" -n 500 | while read -r LINE; do
         # Parsing Json file via jq;
-        alerts="$(echo "${LINE}" | jq -c '[.timestamp, .src_ip, .dest_ip, .dest_port, .proto, .alert .signature_id, .alert .signature, .alert .category]' | sed 's/^.//g; s/"//g; s/]//g')"
-        IFS=$'\n'
-        for alert in $alerts; do
-            IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category <<< "$alert"
-            purge_mark_ip
-            white_list && continue
-            mik_ban_ip
-        done
+        IFS="," read -r timestamp src_ip dest_ip dest_port proto signature_id signature category \
+            <<< "$(jq -r '[.timestamp, .src_ip, .dest_ip, .dest_port, .proto, .alert .signature_id, .alert .signature, .alert .category] | @csv' <<< "${LINE}" | sed 's/"//g')"
+        time_purge_now="$(date +%s)" ; (( time_purge_now - time_purge_last >= $PURGE_MARK_IP_TIMEOUT * 3600 )) && purge_mark_ip && time_purge_last="$time_purge_now"
+        white_list && continue
+        mik_ban_ip
     done
 }
 
