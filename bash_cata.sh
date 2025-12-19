@@ -5,7 +5,7 @@
 # required packages: jq, grepcidr, tmux;
 #
 # Bashcata Variables;
-ROUTER="172.16.5.3" # mikrotik ip;
+ROUTER="" # mikrotik ip;
 LOGIN="idps" # user for connect to mikrotik;
 PRIVATEKEY="/root/.ssh/idps_ed25519" # private key for ssh;
 FW_LIST="idps_alert" # name firewall list;
