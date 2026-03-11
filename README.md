@@ -187,7 +187,7 @@ SSH-exec configuration required. https://wiki.mikrotik.com/wiki/Manual:System/SS
 }
 ---
 /system/scheduler/add name="bash_cata" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event="/system/script/run bash_cata"
-/system/scheduler/add name="ram_disk" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event=":delay 15; /disk/add type=tmpfs tmpfs-max-size=3M slot=ram-disk"
+/system/scheduler/add name="ram_disk" start-time=startup interval="00:00:00" policy="ftp,read,write,test" on-event=":delay 30; /disk/add type=tmpfs tmpfs-max-size=3M slot=ram-disk"
 ---
 ### Сreating a key pair in linux host:
  - rsa:
